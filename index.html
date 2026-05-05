@@ -1,1 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML/CSS/JS実行ツール2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f0f2f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .editor-container {
+            height: 250px;
+        }
+        textarea {
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            resize: none;
+        }
+        .tab-active {
+            border-bottom: 3px solid #3b82f6;
+            color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <div class="max-w-5xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white text-center">
+            <h1 class="text-2xl md:text-3xl font-bold">HTML/CSS/JS実行ツール2</h1>
+            <p class="text-blue-100 mt-2">コードを入力して「実行」ボタンを押すと、新しいタブで実行結果を確認できます！</p>
+        </header>
+
+        <div class="p-4 md:p-6 space-y-6">
+            <!-- Grid for Editors -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <!-- HTML Editor -->
+                <div class="flex flex-col">
+                    <label class="font-bold mb-2 text-red-500 flex items-center">
+                        <span class="mr-2">📄</span> HTML
+                    </label>
+                    <textarea id="html-code" class="w-full editor-container p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" placeholder="<div>こんにちは！</div>"></textarea>
+                </div>
+
+                <!-- CSS Editor -->
+                <div class="flex flex-col">
+                    <label class="font-bold mb-2 text-blue-500 flex items-center">
+                        <span class="mr-2">🎨</span> CSS
+                    </label>
+                    <textarea id="css-code" class="w-full editor-container p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" placeholder="body { color: blue; }"></textarea>
+                </div>
+
+                <!-- JS Editor -->
+                <div class="flex flex-col">
+                    <label class="font-bold mb-2 text-yellow-500 flex items-center">
+                        <span class="mr-2">⚡</span> JavaScript
+                    </label>
+                    <textarea id="js-code" class="w-full editor-container p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" placeholder="console.log('Hello!');"></textarea>
+                </div>
+            </div>
+
+            <!-- Action Button -->
+            <div class="flex justify-center pt-4">
+                <button onclick="executeCode()" class="bg-green-500 hover:bg-green-600 active:scale-95 transition-all text-white font-bold py-4 px-12 rounded-full text-xl shadow-lg flex items-center">
+                    <span class="mr-2">🚀</span> 実行する
+                </button>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <footer class="bg-gray-50 p-4 border-t border-gray-200 text-sm text-gray-500 text-center">
+            ブラウザのポップアップブロックが有効な場合は、解除して使用してください。
+        </footer>
+    </div>
+
+    <!-- UI Message Box (Notification) -->
+    <div id="message-box" class="fixed bottom-5 right-5 transform translate-y-20 opacity-0 transition-all duration-300 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-2xl">
+        <span id="message-text"></span>
+    </div>
+
+    <script>
+        function showMessage(text) {
+            const box = document.getElementById('message-box');
+            const msgText = document.getElementById('message-text');
+            msgText.innerText = text;
+            box.classList.remove('translate-y-20', 'opacity-0');
+            
+            setTimeout(() => {
+                box.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function executeCode() {
+            const html = document.getElementById('html-code').value;
+            const css = document.getElementById('css-code').value;
+            const js = document.getElementById('js-code').value;
+
+            // 組合わせるHTMLの構築
+            const combinedContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        ${css}
+                    </style>
+                </head>
+                <body>
+                    ${html}
+                    <script>
+                        try {
+                            ${js}
+                        } catch (err) {
+                            document.body.innerHTML += '<div style="color:red; margin-top:20px; font-family:sans-serif;"><strong>JS Error:</strong> ' + err.message + '</div>';
+                        }
+                    <\/script>
+                </body>
+                </html>
+            `;
+
+            try {
+                // about:blank で新しいウィンドウを開く
+                const newWindow = window.open('about:blank', '_blank');
+                
+                if (newWindow) {
+                    newWindow.document.open();
+                    newWindow.document.write(combinedContent);
+                    newWindow.document.close();
+                    showMessage('実行に成功しました！');
+                } else {
+                    showMessage('ポップアップがブロックされました。許可してください。');
+                }
+            } catch (e) {
+                console.error(e);
+                showMessage('実行中にエラーが発生しました。');
+            }
+        }
+
+        // 初期サンプルの入力
+        window.onload = () => {
+            document.getElementById('html-code').value = '<h1>Hello World!</h1>\n<p>このツールは最高だよ！</p>\n<button id="btn" class="my-btn">クリックしてね</button>';
+            document.getElementById('css-code').value = 'body { \n  text-align: center; \n  padding-top: 50px; \n  font-family: sans-serif; \n  background: #fdfdfd;\n}\n.my-btn { \n  background: #3b82f6; \n  color: white; \n  padding: 10px 20px; \n  border: none; \n  border-radius: 5px; \n  cursor: pointer; \n}';
+            document.getElementById('js-code').value = 'const btn = document.getElementById("btn");\nbtn.onclick = () => {\n  alert("実行成功！");\n  btn.innerText = "クリックされたよ！";\n  btn.style.background = "#10b981";\n};';
+        };
+    </script>
+</body>
+</html>
+
 
