@@ -1,150 +1,357 @@
+```html
 <!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HTML/CSS/JS実行ツール2</title>
+    <title>HTML/CSS/JS実行ツール2 - Pro Editor</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Monaco Editor Load -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <!-- JSZip for ZIP processing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        body {
-            background-color: #f0f2f5;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        .editor-container {
-            height: 250px;
-        }
-        textarea {
-            font-family: 'Fira Code', 'Courier New', Courier, monospace;
-            resize: none;
-        }
-        .tab-active {
-            border-bottom: 3px solid #3b82f6;
-            color: #3b82f6;
-        }
+        body, html { height: 100%; margin: 0; overflow: hidden; background: #1e1e1e; color: #d4d4d4; font-family: sans-serif; }
+        #container { display: flex; height: calc(100vh - 60px); }
+        #sidebar { width: 250px; background: #252526; border-right: 1px solid #333; display: flex; flex-direction: column; }
+        #editor-area { flex-grow: 1; display: flex; flex-direction: column; background: #1e1e1e; }
+        #monaco-container { flex-grow: 1; }
+        .file-item { padding: 4px 12px; cursor: pointer; display: flex; align-items: center; font-size: 13px; }
+        .file-item:hover { background: #2a2d2e; }
+        .file-item.active { background: #37373d; color: #fff; }
+        .folder-header { padding: 8px 12px; font-weight: bold; font-size: 11px; text-transform: uppercase; color: #858585; display: flex; justify-content: space-between; align-items: center; }
+        header { height: 60px; background: #3c3c3c; display: flex; align-items: center; padding: 0 20px; gap: 20px; justify-content: space-between; }
+        .upload-bar { background: #333; border: 1px solid #444; border-radius: 4px; padding: 5px 15px; display: flex; align-items: center; gap: 10px; }
+        .upload-label { font-size: 12px; font-weight: bold; color: #aaa; margin-right: 5px; }
+        .btn { padding: 4px 12px; border-radius: 3px; font-size: 13px; cursor: pointer; transition: 0.2s; border: none; }
+        .btn-primary { background: #007acc; color: white; }
+        .btn-primary:hover { background: #0062a3; }
+        .btn-secondary { background: #444; color: #ccc; }
+        .btn-secondary:hover { background: #555; }
+        .btn-run { background: #28a745; color: white; padding: 8px 24px; font-weight: bold; border-radius: 5px; }
+        .btn-run:hover { background: #218838; transform: scale(1.05); }
+        .tab-bar { background: #252526; display: flex; overflow-x: auto; border-bottom: 1px solid #1e1e1e; }
+        .tab { padding: 8px 15px; background: #2d2d2d; font-size: 12px; border-right: 1px solid #1e1e1e; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        .tab.active { background: #1e1e1e; border-top: 1px solid #007acc; }
+        input[type="file"] { display: none; }
+        /* Modal */
+        #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; place-items: center; z-index: 1000; }
+        .modal { background: #2d2d2d; padding: 20px; border-radius: 8px; max-width: 400px; text-align: center; }
     </style>
 </head>
-<body class="p-4 md:p-8">
-    <div class="max-w-5xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
-        <!-- Header -->
-        <header class="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white text-center">
-            <h1 class="text-2xl md:text-3xl font-bold">HTML/CSS/JS実行ツール2</h1>
-            <p class="text-blue-100 mt-2">コードを入力して「実行」ボタンを押すと、新しいタブで実行結果を確認できます！</p>
-        </header>
+<body>
 
-        <div class="p-4 md:p-6 space-y-6">
-            <!-- Grid for Editors -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <!-- HTML Editor -->
-                <div class="flex flex-col">
-                    <label class="font-bold mb-2 text-red-500 flex items-center">
-                        <span class="mr-2">📄</span> HTML
-                    </label>
-                    <textarea id="html-code" class="w-full editor-container p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" placeholder="<div>こんにちは！</div>"></textarea>
-                </div>
+<header>
+    <div class="flex items-center gap-4">
+        <h1 class="font-bold text-white text-lg">HTML/CSS/JS 実行ツール2</h1>
+        <div class="upload-bar">
+            <span class="upload-label">アップロード</span>
+            <button class="btn btn-secondary" onclick="triggerUpload('file')">ファイル</button>
+            <button class="btn btn-secondary" onclick="triggerUpload('zip')">ZIP</button>
+            <button class="btn btn-secondary" onclick="triggerUpload('folder')">フォルダ</button>
+        </div>
+    </div>
+    <button class="btn btn-run" onclick="executeApp()">実行</button>
+</header>
 
-                <!-- CSS Editor -->
-                <div class="flex flex-col">
-                    <label class="font-bold mb-2 text-blue-500 flex items-center">
-                        <span class="mr-2">🎨</span> CSS
-                    </label>
-                    <textarea id="css-code" class="w-full editor-container p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" placeholder="body { color: blue; }"></textarea>
-                </div>
-
-                <!-- JS Editor -->
-                <div class="flex flex-col">
-                    <label class="font-bold mb-2 text-yellow-500 flex items-center">
-                        <span class="mr-2">⚡</span> JavaScript
-                    </label>
-                    <textarea id="js-code" class="w-full editor-container p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" placeholder="console.log('Hello!');"></textarea>
-                </div>
-            </div>
-
-            <!-- Action Button -->
-            <div class="flex justify-center pt-4">
-                <button onclick="executeCode()" class="bg-green-500 hover:bg-green-600 active:scale-95 transition-all text-white font-bold py-4 px-12 rounded-full text-xl shadow-lg flex items-center">
-                    <span class="mr-2">🚀</span> 実行する
-                </button>
+<div id="container">
+    <!-- Sidebar / File Explorer -->
+    <div id="sidebar">
+        <div class="folder-header">
+            <span>エクスプローラー</span>
+            <div class="flex gap-2">
+                <button title="CSS追加" onclick="addNewFile('css')"><i data-lucide="plus-square" class="w-3 h-3"></i>CSS</button>
+                <button title="JS追加" onclick="addNewFile('js')"><i data-lucide="plus-square" class="w-3 h-3"></i>JS</button>
             </div>
         </div>
-
-        <!-- Instructions -->
-        <footer class="bg-gray-50 p-4 border-t border-gray-200 text-sm text-gray-500 text-center">
-            ブラウザのポップアップブロックが有効な場合は、解除して使用してください。
-        </footer>
+        <div id="file-list" class="overflow-y-auto flex-grow">
+            <!-- Files injected here -->
+        </div>
     </div>
 
-    <!-- UI Message Box (Notification) -->
-    <div id="message-box" class="fixed bottom-5 right-5 transform translate-y-20 opacity-0 transition-all duration-300 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-2xl">
-        <span id="message-text"></span>
+    <!-- Main Editor Area -->
+    <div id="editor-area">
+        <div id="tab-bar" class="tab-bar">
+            <!-- Tabs injected here -->
+        </div>
+        <div id="monaco-container"></div>
     </div>
+</div>
 
-    <script>
-        function showMessage(text) {
-            const box = document.getElementById('message-box');
-            const msgText = document.getElementById('message-text');
-            msgText.innerText = text;
-            box.classList.remove('translate-y-20', 'opacity-0');
-            
-            setTimeout(() => {
-                box.classList.add('translate-y-20', 'opacity-0');
-            }, 3000);
+<!-- Hidden Inputs -->
+<input type="file" id="input-file" multiple onchange="handleFileSelect(event)">
+<input type="file" id="input-zip" accept=".zip" onchange="handleZipSelect(event)">
+<input type="file" id="input-folder" webkitdirectory mozdirectory onchange="handleFileSelect(event)">
+
+<!-- Overwrite Confirmation Modal -->
+<div id="modal-overlay">
+    <div class="modal">
+        <h3 class="text-xl mb-4 text-white">上書きの確認</h3>
+        <p class="mb-6 text-gray-400">すでにコードが入力されています。アップロードした内容で上書きしてもよろしいですか？</p>
+        <div class="flex justify-center gap-4">
+            <button class="btn btn-secondary px-8" onclick="closeModal(false)">いいえ</button>
+            <button class="btn btn-primary px-8" onclick="closeModal(true)">はい</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- State Management ---
+    let files = {
+        'index.html': { name: 'index.html', type: 'html', content: '<h1>Hello World</h1>', language: 'html' },
+        'style.css': { name: 'style.css', type: 'css', content: 'body { background: #f0f0f0; }', language: 'css' },
+        'script.js': { name: 'script.js', type: 'js', content: 'console.log("Started!");', language: 'javascript' }
+    };
+    let activeFileId = 'index.html';
+    let editor = null;
+    let assets = {}; // Store binary data like images (Blob URLs)
+    let resolveOverwrite = null;
+
+    // --- Monaco Initialization ---
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+    require(['vs/editor/editor.main'], function() {
+        editor = monaco.editor.create(document.getElementById('monaco-container'), {
+            value: files[activeFileId].content,
+            language: files[activeFileId].language,
+            theme: 'vs-dark',
+            automaticLayout: true,
+            fontSize: 14,
+            minimap: { enabled: false }
+        });
+
+        editor.onDidChangeModelContent(() => {
+            if (activeFileId && files[activeFileId]) {
+                files[activeFileId].content = editor.getValue();
+            }
+        });
+
+        renderSidebar();
+        renderTabs();
+        lucide.createIcons();
+    });
+
+    // --- File System Logic ---
+    function renderSidebar() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(files).forEach(id => {
+            const item = document.createElement('div');
+            item.className = `file-item ${activeFileId === id ? 'active' : ''}`;
+            const icon = id.endsWith('.html') ? 'layout' : id.endsWith('.css') ? 'palette' : 'code';
+            item.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4 mr-2"></i> ${id}`;
+            item.onclick = () => switchFile(id);
+            list.appendChild(item);
+        });
+        
+        // Render assets (images etc)
+        if (Object.keys(assets).length > 0) {
+            const assetHeader = document.createElement('div');
+            assetHeader.className = "folder-header mt-4";
+            assetHeader.innerText = "アセット";
+            list.appendChild(assetHeader);
+            Object.keys(assets).forEach(id => {
+                const item = document.createElement('div');
+                item.className = "file-item text-gray-500 opacity-70";
+                item.innerHTML = `<i data-lucide="image" class="w-4 h-4 mr-2"></i> ${id}`;
+                list.appendChild(item);
+            });
         }
+        lucide.createIcons();
+    }
 
-        function executeCode() {
-            const html = document.getElementById('html-code').value;
-            const css = document.getElementById('css-code').value;
-            const js = document.getElementById('js-code').value;
+    function renderTabs() {
+        const tabBar = document.getElementById('tab-bar');
+        tabBar.innerHTML = '';
+        Object.keys(files).forEach(id => {
+            const tab = document.createElement('div');
+            tab.className = `tab ${activeFileId === id ? 'active' : ''}`;
+            tab.innerHTML = `<span>${id}</span>`;
+            tab.onclick = () => switchFile(id);
+            tabBar.appendChild(tab);
+        });
+    }
 
-            // 組合わせるHTMLの構築
-            const combinedContent = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <style>
-                        ${css}
-                    </style>
-                </head>
-                <body>
-                    ${html}
-                    <script>
-                        try {
-                            ${js}
-                        } catch (err) {
-                            document.body.innerHTML += '<div style="color:red; margin-top:20px; font-family:sans-serif;"><strong>JS Error:</strong> ' + err.message + '</div>';
-                        }
-                    <\/script>
-                </body>
-                </html>
-            `;
+    function switchFile(id) {
+        if (!files[id]) return;
+        activeFileId = id;
+        const model = monaco.editor.createModel(files[id].content, files[id].language);
+        editor.setModel(model);
+        renderSidebar();
+        renderTabs();
+    }
 
-            try {
-                // about:blank で新しいウィンドウを開く
-                const newWindow = window.open('about:blank', '_blank');
-                
-                if (newWindow) {
-                    newWindow.document.open();
-                    newWindow.document.write(combinedContent);
-                    newWindow.document.close();
-                    showMessage('実行に成功しました！');
-                } else {
-                    showMessage('ポップアップがブロックされました。許可してください。');
-                }
-            } catch (e) {
-                console.error(e);
-                showMessage('実行中にエラーが発生しました。');
+    function addNewFile(type) {
+        const id = `extra-${Object.keys(files).length}.${type}`;
+        files[id] = {
+            name: id,
+            type: type,
+            content: `/* New ${type} file */`,
+            language: type === 'css' ? 'css' : 'javascript'
+        };
+        switchFile(id);
+    }
+
+    // --- Upload Handlers ---
+    function triggerUpload(mode) {
+        document.getElementById(`input-${mode}`).click();
+    }
+
+    async function checkOverwrite() {
+        const isDefault = (
+            files['index.html']?.content.includes('<h1>Hello World</h1>') &&
+            files['style.css']?.content.includes('background: #f0f0f0') &&
+            Object.keys(files).length <= 3
+        );
+        const isEmpty = Object.values(files).every(f => f.content.trim() === '');
+        
+        if (isDefault || isEmpty) return true;
+
+        document.getElementById('modal-overlay').style.display = 'grid';
+        return new Promise(resolve => {
+            resolveOverwrite = resolve;
+        });
+    }
+
+    function closeModal(result) {
+        document.getElementById('modal-overlay').style.display = 'none';
+        if (resolveOverwrite) resolveOverwrite(result);
+    }
+
+    async function handleFileSelect(event) {
+        const uploadedFiles = Array.from(event.target.files);
+        if (uploadedFiles.length === 0) return;
+
+        const shouldProceed = await checkOverwrite();
+        if (!shouldProceed) return;
+
+        processFiles(uploadedFiles);
+    }
+
+    async function handleZipSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const shouldProceed = await checkOverwrite();
+        if (!shouldProceed) return;
+
+        const zip = await JSZip.loadAsync(file);
+        const filePromises = [];
+        
+        zip.forEach((relativePath, zipEntry) => {
+            if (!zipEntry.dir) {
+                filePromises.push((async () => {
+                    const blob = await zipEntry.async("blob");
+                    // Create a File-like object
+                    return new File([blob], relativePath, { type: getMimeType(relativePath) });
+                })());
+            }
+        });
+
+        const extractedFiles = await Promise.all(filePromises);
+        processFiles(extractedFiles);
+    }
+
+    function getMimeType(filename) {
+        if (filename.endsWith('.html')) return 'text/html';
+        if (filename.endsWith('.css')) return 'text/css';
+        if (filename.endsWith('.js')) return 'text/javascript';
+        if (filename.endsWith('.png')) return 'image/png';
+        if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) return 'image/jpeg';
+        if (filename.endsWith('.svg')) return 'image/svg+xml';
+        return 'application/octet-stream';
+    }
+
+    async function processFiles(fileList) {
+        // Reset only core files if we are doing a "replacement" upload
+        let newFiles = {};
+        let newAssets = {};
+
+        for (const file of fileList) {
+            const name = file.name.split('/').pop(); // フォルダ構造があってもファイル名を取得
+            const ext = name.split('.').pop().toLowerCase();
+
+            if (['html', 'css', 'js'].includes(ext)) {
+                const text = await file.text();
+                newFiles[name] = {
+                    name: name,
+                    type: ext,
+                    content: text,
+                    language: ext === 'js' ? 'javascript' : ext
+                };
+            } else {
+                // Image or other asset
+                const url = URL.createObjectURL(file);
+                newAssets[name] = url;
             }
         }
 
-        // 初期サンプルの入力
-        window.onload = () => {
-            document.getElementById('html-code').value = '<h1>Hello World!</h1>\n<p>このツールは最高だよ！</p>\n<button id="btn" class="my-btn">クリックしてね</button>';
-            document.getElementById('css-code').value = 'body { \n  text-align: center; \n  padding-top: 50px; \n  font-family: sans-serif; \n  background: #fdfdfd;\n}\n.my-btn { \n  background: #3b82f6; \n  color: white; \n  padding: 10px 20px; \n  border: none; \n  border-radius: 5px; \n  cursor: pointer; \n}';
-            document.getElementById('js-code').value = 'const btn = document.getElementById("btn");\nbtn.onclick = () => {\n  alert("実行成功！");\n  btn.innerText = "クリックされたよ！";\n  btn.style.background = "#10b981";\n};';
-        };
-    </script>
+        if (Object.keys(newFiles).length > 0) {
+            files = newFiles;
+            activeFileId = Object.keys(files)[0];
+            editor.setValue(files[activeFileId].content);
+            monaco.editor.setModelLanguage(editor.getModel(), files[activeFileId].language);
+        }
+        
+        // Append assets instead of replacing (keep references)
+        assets = { ...assets, ...newAssets };
+        
+        renderSidebar();
+        renderTabs();
+    }
+
+    // --- Execution Logic ---
+    function executeApp() {
+        const htmlFile = Object.values(files).find(f => f.type === 'html') || { content: '' };
+        let finalHtml = htmlFile.content;
+
+        // CSS Injection
+        let styles = "";
+        Object.values(files).filter(f => f.type === 'css').forEach(f => {
+            styles += `\n/* ${f.name} */\n${f.content}`;
+        });
+
+        // JS Injection
+        let scripts = "";
+        Object.values(files).filter(f => f.type === 'js').forEach(f => {
+            scripts += `\n// ${f.name}\n${f.content}`;
+        });
+
+        // Replace asset references in HTML and CSS
+        // This is a simple replacement for local filenames to Blob URLs
+        Object.entries(assets).forEach(([name, url]) => {
+            const regex = new RegExp(name, 'g');
+            finalHtml = finalHtml.replace(regex, url);
+            styles = styles.replace(regex, url);
+        });
+
+        const combined = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>${styles}</style>
+            </head>
+            <body>
+                ${finalHtml}
+                <script>${scripts}<\/script>
+            </body>
+            </html>
+        `;
+
+        const win = window.open('about:blank', '_blank');
+        if (win) {
+            win.document.open();
+            win.document.write(combined);
+            win.document.close();
+        } else {
+            alert('ポップアップを許可してください！');
+        }
+    }
+</script>
+
 </body>
 </html>
 
-
+```
