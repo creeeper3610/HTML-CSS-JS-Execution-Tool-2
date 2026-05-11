@@ -1,0 +1,360 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML/CSS/JS実行ツール2 - AI Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body, html { height: 100%; margin: 0; overflow: hidden; background: #1e1e1e; color: #d4d4d4; }
+        #container { display: flex; height: calc(100vh - 60px); }
+        #sidebar { width: 220px; background: #252526; border-right: 1px solid #333; display: flex; flex-direction: column; }
+        #main-area { flex-grow: 1; display: flex; flex-direction: column; background: #1e1e1e; position: relative; }
+        #monaco-container { flex-grow: 1; }
+        
+        /* Tab Bar Styles */
+        .tab-bar { background: #252526; display: flex; overflow-x: auto; border-bottom: 1px solid #111; height: 35px; }
+        .tab { padding: 0 15px; height: 100%; background: #2d2d2d; font-size: 12px; border-right: 1px solid #1e1e1e; cursor: pointer; display: flex; align-items: center; gap: 8px; color: #969696; user-select: none; }
+        .tab.active { background: #1e1e1e; color: #fff; border-top: 1px solid #007acc; }
+        .tab-ai { color: #d8b4fe !important; font-weight: bold; }
+        .tab-ai.active { border-top: 1px solid #a855f7; }
+
+        header { height: 60px; background: #333; display: flex; align-items: center; padding: 0 20px; gap: 15px; justify-content: space-between; border-bottom: 1px solid #000; }
+        .upload-bar { background: #252526; border: 1px solid #444; border-radius: 6px; padding: 4px 10px; display: flex; align-items: center; gap: 8px; }
+        
+        .btn { padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer; transition: 0.2s; border: none; }
+        .btn-primary { background: #007acc; color: white; }
+        .btn-run { background: #10b981; color: white; padding: 6px 20px; font-weight: bold; border-radius: 6px; }
+        
+        /* Gemini Panel */
+        #ai-panel { position: absolute; inset: 35px 0 0 0; background: #1e1e1e; display: none; flex-direction: column; z-index: 10; }
+        #ai-chat-history { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .ai-msg { max-width: 85%; padding: 12px; border-radius: 8px; line-height: 1.5; font-size: 14px; }
+        .ai-msg.user { align-self: flex-end; background: #37373d; color: white; }
+        .ai-msg.bot { align-self: flex-start; background: #2d2d2d; border: 1px solid #444; color: #d4d4d4; }
+        
+        .file-item { padding: 6px 12px; cursor: pointer; display: flex; align-items: center; font-size: 13px; color: #ccc; }
+        .file-item:hover { background: #2a2d2e; }
+        .folder-label { padding: 8px 12px; font-size: 11px; font-weight: bold; color: #666; text-transform: uppercase; }
+        
+        #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; place-items: center; z-index: 2000; }
+        pre { background: #000; padding: 10px; border-radius: 4px; overflow-x: auto; margin: 10px 0; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="flex items-center gap-4 overflow-hidden">
+        <h1 class="font-bold text-white text-base whitespace-nowrap">HTML/CSS/JS実行ツール2</h1>
+        <div class="upload-bar hidden md:flex">
+            <span class="text-[10px] text-gray-500 font-bold uppercase">Upload</span>
+            <button class="btn bg-gray-700 text-white hover:bg-gray-600" onclick="triggerUpload('file')">ファイル</button>
+            <button class="btn bg-gray-700 text-white hover:bg-gray-600" onclick="triggerUpload('zip')">ZIP</button>
+            <button class="btn bg-gray-700 text-white hover:bg-gray-600" onclick="triggerUpload('folder')">フォルダ</button>
+        </div>
+    </div>
+    <div class="flex items-center gap-2">
+        <button class="btn bg-purple-600 text-white font-bold" onclick="switchFile('gemini-ai')">✨ AIに相談</button>
+        <button class="btn btn-run" onclick="executeApp()">実行 🚀</button>
+    </div>
+</header>
+
+<div id="container">
+    <div id="sidebar">
+        <div class="folder-label">エクスプローラー</div>
+        <div id="file-list-sidebar" class="flex-grow overflow-y-auto"></div>
+        <div class="p-2 border-t border-gray-700 flex gap-1">
+            <button class="flex-1 btn bg-gray-700 text-[10px]" onclick="addNewFile('css')">+ CSS</button>
+            <button class="flex-1 btn bg-gray-700 text-[10px]" onclick="addNewFile('js')">+ JS</button>
+        </div>
+    </div>
+
+    <div id="main-area">
+        <div id="tab-bar" class="tab-bar"></div>
+        
+        <div id="monaco-container"></div>
+
+        <!-- Gemini AI Panel -->
+        <div id="ai-panel">
+            <div id="ai-chat-history">
+                <div class="ai-msg bot">
+                    やっほー！Geminiだよ。コードの書き換えや新しい機能の追加、バグの修正なんでも手伝うよ！何を作りたいか教えてね。
+                </div>
+            </div>
+            <div class="p-4 bg-gray-800 flex gap-2">
+                <input type="text" id="ai-input" class="flex-grow bg-gray-900 border border-gray-700 rounded px-4 py-2 text-sm focus:outline-none focus:border-purple-500" placeholder="例: ボタンを赤くして、クリック時にアニメーションを追加して">
+                <button onclick="askGemini()" id="ai-send-btn" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded text-sm font-bold transition-all">送信</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modals & Hidden Inputs -->
+<input type="file" id="input-file" multiple onchange="handleFileSelect(event)">
+<input type="file" id="input-zip" accept=".zip" onchange="handleZipSelect(event)">
+<input type="file" id="input-folder" webkitdirectory mozdirectory onchange="handleFileSelect(event)">
+
+<div id="modal-overlay">
+    <div class="bg-gray-800 p-6 rounded-lg max-w-sm text-center">
+        <h3 class="text-white font-bold mb-2">上書きしますか？</h3>
+        <p class="text-gray-400 text-sm mb-6">現在のエディタの内容が消去されます。</p>
+        <div class="flex gap-2">
+            <button class="flex-1 btn bg-gray-600 text-white" onclick="closeModal(false)">キャンセル</button>
+            <button class="flex-1 btn btn-primary" onclick="closeModal(true)">上書きする</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- Global Config ---
+    const apiKey = ""; // Gemini API Key
+    let files = {
+        'index.html': { content: '<h1>Hello AI!</h1>\n<p>Geminiに相談してコードを変えてみてね。</p>', language: 'html' },
+        'style.css': { content: 'body { font-family: sans-serif; text-align: center; padding: 50px; }', language: 'css' },
+        'script.js': { content: 'console.log("Ready!");', language: 'javascript' }
+    };
+    let activeFileId = 'index.html';
+    let editor = null;
+    let assets = {};
+    let resolveOverwrite = null;
+
+    // --- Monaco Setup ---
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+    require(['vs/editor/editor.main'], function() {
+        editor = monaco.editor.create(document.getElementById('monaco-container'), {
+            value: files[activeFileId].content,
+            language: files[activeFileId].language,
+            theme: 'vs-dark',
+            automaticLayout: true,
+            fontSize: 14,
+            minimap: { enabled: false }
+        });
+
+        editor.onDidChangeModelContent(() => {
+            if (activeFileId !== 'gemini-ai' && files[activeFileId]) {
+                files[activeFileId].content = editor.getValue();
+            }
+        });
+
+        renderAll();
+        lucide.createIcons();
+    });
+
+    function renderAll() {
+        renderSidebar();
+        renderTabs();
+    }
+
+    function renderSidebar() {
+        const list = document.getElementById('file-list-sidebar');
+        list.innerHTML = '';
+        Object.keys(files).forEach(id => {
+            const item = document.createElement('div');
+            item.className = `file-item ${activeFileId === id ? 'bg-gray-700 text-white' : ''}`;
+            item.innerHTML = `<i data-lucide="file-code" class="w-3 h-3 mr-2"></i> ${id}`;
+            item.onclick = () => switchFile(id);
+            list.appendChild(item);
+        });
+        lucide.createIcons();
+    }
+
+    function renderTabs() {
+        const bar = document.getElementById('tab-bar');
+        bar.innerHTML = '';
+        
+        // Add Files
+        Object.keys(files).forEach(id => {
+            const tab = document.createElement('div');
+            tab.className = `tab ${activeFileId === id ? 'active' : ''}`;
+            tab.innerHTML = `<span>${id}</span>`;
+            tab.onclick = () => switchFile(id);
+            bar.appendChild(tab);
+        });
+
+        // Add Gemini Tab
+        const aiTab = document.createElement('div');
+        aiTab.className = `tab tab-ai ${activeFileId === 'gemini-ai' ? 'active' : ''}`;
+        aiTab.innerHTML = `<i data-lucide="sparkles" class="w-3 h-3"></i> Gemini AI`;
+        aiTab.onclick = () => switchFile('gemini-ai');
+        bar.appendChild(aiTab);
+        
+        lucide.createIcons();
+    }
+
+    function switchFile(id) {
+        activeFileId = id;
+        const aiPanel = document.getElementById('ai-panel');
+        
+        if (id === 'gemini-ai') {
+            aiPanel.style.display = 'flex';
+        } else {
+            aiPanel.style.display = 'none';
+            const model = monaco.editor.createModel(files[id].content, files[id].language);
+            editor.setModel(model);
+        }
+        renderAll();
+    }
+
+    function addNewFile(ext) {
+        const name = `style-${Object.keys(files).length}.${ext}`;
+        files[name] = { content: '', language: ext === 'js' ? 'javascript' : 'css' };
+        switchFile(name);
+    }
+
+    // --- Gemini AI Logic ---
+    async function askGemini() {
+        const input = document.getElementById('ai-input');
+        const prompt = input.value.trim();
+        if (!prompt) return;
+
+        addChatMessage('user', prompt);
+        input.value = '';
+        
+        const sendBtn = document.getElementById('ai-send-btn');
+        sendBtn.disabled = true;
+        sendBtn.innerText = "考え中...";
+
+        // Construct System Context
+        const context = `
+            あなたは優秀なWeb開発者です。現在のコードを指示に従って修正してください。
+            回答は以下のJSON形式のみで返してください：
+            {
+                "explanation": "修正内容の説明",
+                "files": {
+                    "index.html": "新しいHTMLの内容",
+                    "style.css": "新しいCSSの内容",
+                    "script.js": "新しいJSの内容"
+                }
+            }
+            現在のコード:
+            HTML: ${files['index.html']?.content || ""}
+            CSS: ${files['style.css']?.content || ""}
+            JS: ${files['script.js']?.content || ""}
+        `;
+
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    systemInstruction: { parts: [{ text: context }] },
+                    generationConfig: { responseMimeType: "application/json" }
+                })
+            });
+
+            const data = await response.json();
+            const result = JSON.parse(data.candidates[0].content.parts[0].text);
+            
+            addChatMessage('bot', result.explanation, result.files);
+        } catch (err) {
+            console.error(err);
+            addChatMessage('bot', 'ごめんね、エラーが発生しちゃった。APIキーや通信を確認してみてね。');
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.innerText = "送信";
+        }
+    }
+
+    function addChatMessage(role, text, newFiles = null) {
+        const history = document.getElementById('ai-chat-history');
+        const div = document.createElement('div');
+        div.className = `ai-msg ${role}`;
+        div.innerText = text;
+
+        if (newFiles) {
+            const btn = document.createElement('button');
+            btn.className = "mt-3 block w-full bg-purple-600 hover:bg-purple-700 text-white text-[11px] py-1 rounded font-bold";
+            btn.innerText = "コードをエディタに反映する";
+            btn.onclick = () => {
+                Object.keys(newFiles).forEach(filename => {
+                    if (files[filename]) {
+                        files[filename].content = newFiles[filename];
+                    }
+                });
+                if (activeFileId !== 'gemini-ai') switchFile(activeFileId);
+                alert("反映したよ！「実行」して確認してみてね。");
+            };
+            div.appendChild(btn);
+        }
+
+        history.appendChild(div);
+        history.scrollTop = history.scrollHeight;
+    }
+
+    // --- Upload & Common logic (from previous version) ---
+    function triggerUpload(mode) { document.getElementById(`input-${mode}`).click(); }
+    function closeModal(res) { document.getElementById('modal-overlay').style.display = 'none'; if(resolveOverwrite) resolveOverwrite(res); }
+    
+    async function handleFileSelect(e) {
+        const list = Array.from(e.target.files);
+        if(!list.length) return;
+        document.getElementById('modal-overlay').style.display = 'grid';
+        const ok = await new Promise(r => resolveOverwrite = r);
+        if(!ok) return;
+        
+        let newFiles = {};
+        for(let f of list) {
+            const ext = f.name.split('.').pop().toLowerCase();
+            if(['html','css','js'].includes(ext)) {
+                newFiles[f.name] = { content: await f.text(), language: ext === 'js' ? 'javascript' : ext };
+            } else {
+                assets[f.name] = URL.createObjectURL(f);
+            }
+        }
+        files = newFiles;
+        activeFileId = Object.keys(files)[0];
+        switchFile(activeFileId);
+    }
+
+    async function handleZipSelect(e) {
+        const file = e.target.files[0];
+        if(!file) return;
+        const zip = await JSZip.loadAsync(file);
+        let newFiles = {};
+        for(let path in zip.files) {
+            const entry = zip.files[path];
+            if(entry.dir) continue;
+            const ext = path.split('.').pop().toLowerCase();
+            const blob = await entry.async("blob");
+            const name = path.split('/').pop();
+            if(['html','css','js'].includes(ext)) {
+                newFiles[name] = { content: await blob.text(), language: ext === 'js' ? 'javascript' : ext };
+            } else {
+                assets[name] = URL.createObjectURL(blob);
+            }
+        }
+        files = newFiles;
+        activeFileId = Object.keys(files)[0];
+        switchFile(activeFileId);
+    }
+
+    function executeApp() {
+        let html = files['index.html']?.content || "";
+        let css = "";
+        let js = "";
+        Object.entries(files).forEach(([name, data]) => {
+            if(data.language === 'css') css += `\n/* ${name} */\n${data.content}`;
+            if(data.language === 'javascript') js += `\n// ${name} \n ${data.content}`;
+        });
+        
+        // Asset Linkage
+        Object.entries(assets).forEach(([name, url]) => {
+            html = html.split(name).join(url);
+            css = css.split(name).join(url);
+        });
+
+        const blob = new Blob([`
+            <!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head>
+            <body>${html}<script>${js}<\/script></body></html>
+        `], {type: 'text/html'});
+        
+        window.open(URL.createObjectURL(blob), '_blank');
+    }
+</script>
+</body>
+</html>
